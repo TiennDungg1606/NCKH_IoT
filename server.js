@@ -12,7 +12,7 @@ const server = http.createServer(app);
 
 // Initialize Socket.io and allow all origins (*)
 const io = new Server(server, {
-  allowEIO3,
+  allowEIO3: true, // Allow older Socket.io clients (like ESP32)
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
