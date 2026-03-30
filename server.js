@@ -30,10 +30,7 @@ app.get('/', (req, res) => {
 
 // Handle Socket.io connections
 io.on('connection', (socket) => {
-  // 1. Log client connection
-  console.log(`[+] Client connected with socket ID: ${socket.id}`);
-
-  // 2. Handle ESP32 Registration
+  // 1. Handle ESP32 Registration
   socket.on('register_device', (payload) => {
     if (payload && payload.device_id) {
       const { device_id } = payload;
@@ -59,19 +56,14 @@ io.on('connection', (socket) => {
       if (targetSocketId) {
         // Device is found and online, forward the command to that specific ESP32
         io.to(targetSocketId).emit('command', { action });
-        console.log(`Command '${action}' sent to device: ${device_id}`);
       } else {
         // Device is offline or not registered
-        console.log(`[!] Failed to send command. Device offline: ${device_id}`);
-        
         // Emit an error message back to the WebApp that sent the command
         socket.emit('error', { 
           message: `Device ${device_id} is currently offline.`,
           device_id 
         });
       }
-    } else {
-      console.warn(`[!] Invalid send_command payload received from ${socket.id}`);
     }
   });
 
@@ -85,7 +77,6 @@ io.on('connection', (socket) => {
         console.log(`Device disconnected: ${socket.device_id}`);
       }
     }
-    console.log(`[-] Client disconnected: ${socket.id}`);
   });
 });
 
