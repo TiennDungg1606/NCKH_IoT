@@ -12,6 +12,7 @@ const server = http.createServer(app);
 
 // Initialize Socket.io and allow all origins (*)
 const io = new Server(server, {
+  allowEIO3,
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
