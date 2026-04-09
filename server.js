@@ -13,8 +13,6 @@ const server = http.createServer(app);
 // Initialize Socket.io and allow all origins (*)
 const io = new Server(server, {
   allowEIO3: true, // Allow older Socket.io clients (like ESP32)
-  pingInterval: 10000, // Cứ 10s server sẽ ping hỏi thăm client (ESP32)
-  pingTimeout: 5000,   // Nếu sau 5s từ lúc ping mà ESP không phản hồi thì coi như ngắt kết nối luôn
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
@@ -55,15 +53,14 @@ io.on('connection', (socket) => {
   // 3. Handle WebApp sending command
   socket.on('send_command', (payload) => {
     if (payload && payload.device_id && payload.action) {
-      const { device_id, action } = payload;
+      const { device_id, action, sub_id } = payload;
       const targetSocketId = onlineDevices.get(device_id);
 
       if (targetSocketId) {
         // Device is found and online, forward the command to that specific ESP32
-        io.to(targetSocketId).emit('command', { action });
+        io.to(targetSocketId).emit('command', { action, sub_id });
       } else {
         // Device is offline or not registered
-        // Emit an error message back to the WebApp that sent the command
         socket.emit('error', { 
           message: `Device ${device_id} is currently offline.`,
           device_id 
@@ -74,7 +71,6 @@ io.on('connection', (socket) => {
 
   // 4. Handle Disconnections
   socket.on('disconnect', (reason) => {
-    console.log(`[Disconnect] Socket ${socket.id} ngắt kết nối. Lý do: ${reason}`);
     
     // Check if the disconnected socket belonged to an ESP32
     if (socket.device_id) {
@@ -95,6 +91,29 @@ io.on('connection', (socket) => {
       socket.emit("device_status", { 
         device_id: payload.device_id, 
         status: isOnline ? "online" : "offline" 
+      });
+    }
+  });
+
+  // 5. App yêu cầu thông tin cấu hình/khả năng của từng thiết bị khi Add Device
+  socket.on('get_device_info', (payload) => {
+    if (payload && payload.device_id) {
+      const isOnline = onlineDevices.has(payload.device_id);
+      // Nếu chưa online -> Không thể lấy info hoặc biết thiết bị
+      if (!isOnline) {
+        socket.emit('device_info_result', {
+          device_id: payload.device_id,
+          error: 'Thiết bị hiện không kết nối, hãy nối mạng cho thiết bị trước.'
+        });
+        return;
+      }
+      
+      // Giả lập: hiện thời nhận diện ESP32 multi-gang 4 sub_id như trong code Arduino
+      // Trong tương lai có thể bắt ESP32 gửi capability khi connect
+      socket.emit('device_info_result', {
+        device_id: payload.device_id,
+        isMultiDevice: true,
+        subIds: [1, 2, 3, 4]
       });
     }
   });
