@@ -42,6 +42,9 @@ io.on('connection', (socket) => {
       socket.device_id = device_id; 
       
       console.log(`Device registered: ${device_id}`);
+      
+      // Phát sự kiện cho tất cả các Web Client biết ESP32 này đã online
+      io.emit("device_status", { device_id, status: "online" });
     } else {
       console.warn(`[!] Invalid register_device payload received from ${socket.id}`);
     }
@@ -75,7 +78,20 @@ io.on('connection', (socket) => {
       if (onlineDevices.get(socket.device_id) === socket.id) {
         onlineDevices.delete(socket.device_id);
         console.log(`Device disconnected: ${socket.device_id}`);
+        // Phát sự kiện cho tất cả Web Client biết ESP32 này đã offline
+        io.emit("device_status", { device_id: socket.device_id, status: "offline" });
       }
+    }
+  });
+
+  // Client Web App yêu cầu kiểm tra trạng thái thiết bị lúc mới mở trang
+  socket.on("check_device_status", (payload) => {
+    if (payload && payload.device_id) {
+      const isOnline = onlineDevices.has(payload.device_id);
+      socket.emit("device_status", { 
+        device_id: payload.device_id, 
+        status: isOnline ? "online" : "offline" 
+      });
     }
   });
 });
