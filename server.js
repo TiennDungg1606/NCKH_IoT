@@ -13,6 +13,8 @@ const server = http.createServer(app);
 // Initialize Socket.io and allow all origins (*)
 const io = new Server(server, {
   allowEIO3: true, // Allow older Socket.io clients (like ESP32)
+  pingInterval: 10000, // Cứ 10s server sẽ ping hỏi thăm client (ESP32)
+  pingTimeout: 5000,   // Nếu sau 5s từ lúc ping mà ESP không phản hồi thì coi như ngắt kết nối luôn
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
@@ -71,7 +73,9 @@ io.on('connection', (socket) => {
   });
 
   // 4. Handle Disconnections
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
+    console.log(`[Disconnect] Socket ${socket.id} ngắt kết nối. Lý do: ${reason}`);
+    
     // Check if the disconnected socket belonged to an ESP32
     if (socket.device_id) {
       // Ensure the socket hasn't been overwritten by a rapid reconnect
