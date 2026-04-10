@@ -1,9 +1,24 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const mongoose = require('mongoose');
 
 const app = express();
+
+// Kết nối MongoDB (sẽ dùng chung với URI bên Next.js)
+const MONGODB_URI = process.env.MONGODB_URI; 
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('🔥 MongoDB Connected in Node.js Gateway server'))
+  .catch(err => console.error('Lỗi kết nối MongoDB trong Server Node:', err));
+
+// Khởi tạo Device Schema cơ bản để query trực tiếp dữ liệu thiết bị
+const DeviceSchema = new mongoose.Schema({
+  deviceId: { type: String, required: true },
+  schedules: { type: Array, default: [] }
+}, { strict: false }); // strict: false để tự động bỏ qua các trường không khai báo ở đây
+const Device = mongoose.models.Device || mongoose.model('Device', DeviceSchema);
 
 // Enable CORS for Express routes if you add REST API endpoints later
 app.use(cors());
@@ -118,56 +133,65 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Nhận cập nhật lịch trình từ Web Client
+  // Báo update lịch trình từ Web Client - Server giờ đây tự gọi DB, không lưu Map in-memory nữa
   socket.on("update_schedules", (payload) => {
     if (payload && payload.device_id) {
-      deviceSchedules.set(payload.device_id, payload.schedules || []);
-      console.log(`[LỊCH TRÌNH NODE] Cập nhật ${payload.schedules?.length || 0} lịch cho thiết bị ${payload.device_id}`);
+      console.log(`[LỊCH TRÌNH NODE] Cập nhật thiết bị ${payload.device_id} (Server tự fetch từ MongoDB)`);
     }
   });
 });
 
-// Lưu trữ lịch trình in-memory
-const deviceSchedules = new Map();
-
-// THỰC THI LỊCH TRÌNH MỖI 30 GIÂY
-setInterval(() => {
+// THỰC THI LỊCH TRÌNH MỖI 30 GIÂY AUTO
+setInterval(async () => {
   const now = new Date();
   const currentHour = now.getHours().toString().padStart(2, '0');
   const currentMinute = now.getMinutes().toString().padStart(2, '0');
   const currentTimeStr = `${currentHour}:${currentMinute}`;
   const currentDay = now.getDay(); 
 
-  // Kiểm tra từng thiết bị
-  deviceSchedules.forEach((schedules, device_id) => {
-    if (!Array.isArray(schedules)) return;
+  // Lấy các thiết bị ĐANG ONLINE (không gọi Mongo nếu không có ESP32 nào cắm điện)
+  const onlineDeviceIds = Array.from(onlineDevices.keys());
+  if (onlineDeviceIds.length === 0) return;
 
-    // Không gửi lệnh nếu thiết bị offline
-    const targetSocketId = onlineDevices.get(device_id);
-    if (!targetSocketId) return;
+  try {
+    // 1. CHỈ FIND NHỮNG THIẾT BỊ ĐANG CÓ MẶT TRÊN MẠNG XUỐNG RA SET SCHEDULES
+    const devices = await Device.find({ deviceId: { $in: onlineDeviceIds } });
 
-    schedules.forEach((sched) => {
-      if (sched.active === false) return;
+    // 2. DUYỆT TỪNG THIẾT BỊ TỪ DATABASE
+    devices.forEach((device) => {
+      const device_id = device.deviceId;
+      const schedules = device.schedules;
+      
+      if (!Array.isArray(schedules) || schedules.length === 0) return;
 
-      let shouldRun = false;
-      if (sched.repeat === 'Một lần' || sched.repeat === 'Hàng ngày') {
-        shouldRun = true;
-      } else if (sched.repeat === 'Tùy chỉnh') {
-        shouldRun = sched.customDays?.includes(currentDay) || false;
-      }
+      const targetSocketId = onlineDevices.get(device_id);
+      if (!targetSocketId) return; // double check lỡ vừa fetch nó die 
 
-      if (shouldRun) {
-        if (sched.timeOn === currentTimeStr) {
-          console.log(`[LỊCH TRÌNH NODE] Phát lệnh BẬT -> ${device_id} cổng ${sched.subId}`);
-          io.to(targetSocketId).emit('command', { action: 'on', sub_id: sched.subId });
+      schedules.forEach((sched) => {
+        if (sched.active === false) return;
+
+        let shouldRun = false;
+        if (sched.repeat === 'Một lần' || sched.repeat === 'Hàng ngày') {
+          shouldRun = true;
+        } else if (sched.repeat === 'Tùy chỉnh') {
+          shouldRun = sched.customDays?.includes(currentDay) || false;
         }
-        if (sched.timeOff === currentTimeStr) {
-          console.log(`[LỊCH TRÌNH NODE] Phát lệnh TẮT -> ${device_id} cổng ${sched.subId}`);
-          io.to(targetSocketId).emit('command', { action: 'off', sub_id: sched.subId });
+
+        if (shouldRun) {
+          if (sched.timeOn === currentTimeStr) {
+            console.log(`[LỊCH TRÌNH AUTO MONGODB] Phát lệnh BẬT -> ${device_id} cổng ${sched.subId}`);
+            io.to(targetSocketId).emit('command', { action: 'on', sub_id: sched.subId });
+          }
+          if (sched.timeOff === currentTimeStr) {
+            console.log(`[LỊCH TRÌNH AUTO MONGODB] Phát lệnh TẮT -> ${device_id} cổng ${sched.subId}`);
+            io.to(targetSocketId).emit('command', { action: 'off', sub_id: sched.subId });
+          }
         }
-      }
+      });
     });
-  });
+  } catch (error) {
+    console.error('Lỗi khi fetch dữ liệu từ MongoDB:', error);
+  }
 }, 30000);
 
 // Use process.env.PORT as required by Railway, defaulting to 3000 locally
