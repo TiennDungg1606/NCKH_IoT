@@ -199,7 +199,7 @@ setInterval(async () => {
              if (!executedSchedules.has(execKey)) { // Tránh bắn 2 lần
                 executedSchedules.add(execKey);
                 console.log(`[AUTO] BẬT -> ${device_id} cổng ${sched.subId} (Giờ VN: ${currentTimeStr})`);
-                io.to(targetSocketId).emit('command', { action: 'on', sub_id: sched.subId });
+                io.to(targetSocketId).emit('command', { action: 'ON', sub_id: sched.subId });
                 
                 // Cập nhật Inactive nếu Một Lần (chỉ cập nhật nếu KHÔNG CÓ lịch tắt phía sau chờ)
                 if (sched.repeat === 'Một lần' && !sched.timeOff) {
@@ -215,7 +215,7 @@ setInterval(async () => {
              if (!executedSchedules.has(execKey)) {
                 executedSchedules.add(execKey);
                 console.log(`[AUTO] TẮT -> ${device_id} cổng ${sched.subId} (Giờ VN: ${currentTimeStr})`);
-                io.to(targetSocketId).emit('command', { action: 'off', sub_id: sched.subId });
+                io.to(targetSocketId).emit('command', { action: 'OFF', sub_id: sched.subId });
                 
                 // Một lần tắt là hoàn thành vòng đời -> Inactive
                 if (sched.repeat === 'Một lần') {
