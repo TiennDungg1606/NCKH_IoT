@@ -117,7 +117,58 @@ io.on('connection', (socket) => {
       });
     }
   });
+
+  // Nhận cập nhật lịch trình từ Web Client
+  socket.on("update_schedules", (payload) => {
+    if (payload && payload.device_id) {
+      deviceSchedules.set(payload.device_id, payload.schedules || []);
+      console.log(`[LỊCH TRÌNH NODE] Cập nhật ${payload.schedules?.length || 0} lịch cho thiết bị ${payload.device_id}`);
+    }
+  });
 });
+
+// Lưu trữ lịch trình in-memory
+const deviceSchedules = new Map();
+
+// THỰC THI LỊCH TRÌNH MỖI 30 GIÂY
+setInterval(() => {
+  const now = new Date();
+  const currentHour = now.getHours().toString().padStart(2, '0');
+  const currentMinute = now.getMinutes().toString().padStart(2, '0');
+  const currentTimeStr = `${currentHour}:${currentMinute}`;
+  const currentDay = now.getDay(); 
+
+  // Kiểm tra từng thiết bị
+  deviceSchedules.forEach((schedules, device_id) => {
+    if (!Array.isArray(schedules)) return;
+
+    // Không gửi lệnh nếu thiết bị offline
+    const targetSocketId = onlineDevices.get(device_id);
+    if (!targetSocketId) return;
+
+    schedules.forEach((sched) => {
+      if (sched.active === false) return;
+
+      let shouldRun = false;
+      if (sched.repeat === 'Một lần' || sched.repeat === 'Hàng ngày') {
+        shouldRun = true;
+      } else if (sched.repeat === 'Tùy chỉnh') {
+        shouldRun = sched.customDays?.includes(currentDay) || false;
+      }
+
+      if (shouldRun) {
+        if (sched.timeOn === currentTimeStr) {
+          console.log(`[LỊCH TRÌNH NODE] Phát lệnh BẬT -> ${device_id} cổng ${sched.subId}`);
+          io.to(targetSocketId).emit('command', { action: 'on', sub_id: sched.subId });
+        }
+        if (sched.timeOff === currentTimeStr) {
+          console.log(`[LỊCH TRÌNH NODE] Phát lệnh TẮT -> ${device_id} cổng ${sched.subId}`);
+          io.to(targetSocketId).emit('command', { action: 'off', sub_id: sched.subId });
+        }
+      }
+    });
+  });
+}, 30000);
 
 // Use process.env.PORT as required by Railway, defaulting to 3000 locally
 const PORT = process.env.PORT || 3000;
