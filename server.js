@@ -46,10 +46,13 @@ app.get('/', (req, res) => {
 
 // Handle Socket.io connections
 io.on('connection', (socket) => {
+  console.log(`[SOCKET] Có kết nối Socket mới: ${socket.id}`);
+
   // 1. Handle ESP32 Registration
   socket.on('register_device', async (payload) => {
     if (payload && payload.device_id) {
       const { device_id } = payload;
+      console.log(`✅ [ESP32 ONLINE] Thiết bị ESP32 đã kết nối và đăng ký ID: ${device_id}`);
       
       // Save device_id and its socket.id to the map
       onlineDevices.set(device_id, socket.id);
@@ -93,6 +96,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     // Check if the disconnected socket belonged to an ESP32
     if (socket.device_id) {
+      console.log(`❌ [ESP32 OFFLINE] Thiết bị ID: ${socket.device_id} đã ngắt kết nối (Lý do: ${reason}).`);
+      
       // Ensure the socket hasn't been overwritten by a rapid reconnect
       if (onlineDevices.get(socket.device_id) === socket.id) {
         onlineDevices.delete(socket.device_id);
