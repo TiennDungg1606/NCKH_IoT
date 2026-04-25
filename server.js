@@ -7,6 +7,9 @@ const mongoose = require('mongoose');
 
 const app = express();
 
+// Báo cho Express biết nó đang chạy sau Proxy (Railway) để xử lý Header đúng chuẩn
+app.set('trust proxy', 1);
+
 // Kết nối MongoDB (sẽ dùng chung với URI bên Next.js)
 const MONGODB_URI = process.env.MONGODB_URI; 
 mongoose.connect(MONGODB_URI)
@@ -28,6 +31,7 @@ const server = http.createServer(app);
 // Initialize Socket.io and allow all origins (*)
 const io = new Server(server, {
   allowEIO3: true, // Allow older Socket.io clients (like ESP32)
+  transports: ['websocket', 'polling'],
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
