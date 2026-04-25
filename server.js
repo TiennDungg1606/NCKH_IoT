@@ -31,6 +31,7 @@ const server = http.createServer(app);
 // Initialize Socket.io and allow all origins (*)
 const io = new Server(server, {
   allowEIO3: true, // Allow older Socket.io clients (like ESP32)
+  path: "/socket.io", // Cực kỳ quan trọng để Server đón nhận kết nối từ C++
   transports: ['websocket', 'polling'],
   cors: {
     origin: "*",
